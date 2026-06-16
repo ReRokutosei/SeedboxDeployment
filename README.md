@@ -1,12 +1,16 @@
-# 简单搭建个人 SeedBox
+# 自建 Seedbox 部署指南
 
 ## 背景
 
-前阵子我买了某芬兰厂家的普通 Seedbox（无 root 权限），但经历了两次服务宕机、AI敷衍回复工单后，我决定自行购买 VPS 从头搭建
-
 在此之前的很长一段时间里，我一直使用 Windows 本机运行 qBEE 追番。日常使用倒也没什么大问题，只是偶尔会系统卡顿一下（尤其在我播放音频的时候尤为明显），而且网络也似乎时不时被运营商Q，多少有些不便。再考虑到长期全天做种对 SSD 有读写负担，索性迁移到 VPS 上
 
-因此，我决定将 BT 下载完全迁移到 VPS 上运行
+前阵子我买了某芬兰厂家的普通 Seedbox（无 root 权限的普通盒子），但没想到短时间内就经历了两次服务宕机，发工单也没真人，都是AI敷衍回复。虽然有一键搭建脚本，但它们大多面向 PT 刷流场景，又或者里面预装很多东西等等之类的，于是我便想着，为什么我不自己搞一台大盘机做 Seedbox 呢？
+
+但最近硬盘内存涨价，连带服务器也水涨船高，便宜的大盘机基本都处于售罄状态，更何况是版权宽松的芬兰、荷兰和卢森堡等地的机器，特别是较为知名的 BuyVM，即便补货也是被脚本秒了。要么去继续蹲，要么溢价收……
+
+在我各种搜索之后，（虽然得到的案例不多）知道了我的需求貌似处于一个中间地带，被 DMCA 投诉的对象一般是热门美剧、英剧、好莱坞大片或主流流媒体平台（Netflix、Disney+、HBO等）的独家剧集，而 Mikan、Naya 这类动漫则通常都是经由字幕组烧录重编码，文件哈希已经改变（除了 Raw 生肉搬运、部分由 Netflix 发行的动漫），版权方很难追溯。那么我就想，是不是不一定需要找版权宽松地区的机器？这样选择范围变广了，再考虑到我需要通过 OpenList 在线观看，那在预算有限的情况下，优先选择美西地区的大盘机……
+
+因此，我决定铤而走险，试试在 DMCA 最严格的 US 尝试 BT 下载
 
 以本文记录我个人的操作流程，供日后参考
 
@@ -25,13 +29,22 @@
 
 ---
 
-- [简单搭建个人 SeedBox](#简单搭建个人-seedbox)
+- [自建 Seedbox 部署指南](#自建-seedbox-部署指南)
   - [背景](#背景)
   - [适用人群](#适用人群)
   - [零、 准备工作](#零-准备工作)
   - [一、 系统基础防护](#一-系统基础防护)
-    - [1.1 清除厂家模板残留](#11-清除厂家模板残留)
+    - [1.1 系统基础优化](#11-系统基础优化)
+      - [1.1.1 清除厂家模板](#111-清除厂家模板)
+      - [1.1.2 开启 BBR 网络加速](#112-开启-bbr-网络加速)
+      - [1.1.3 增大 Swap（可选）](#113-增大-swap可选)
+      - [1.1.4 切换默认 Shell 为 Bash](#114-切换默认-shell-为-bash)
     - [1.2 SSH 密钥登录](#12-ssh-密钥登录)
+      - [1.2.1 生成密钥对](#121-生成密钥对)
+      - [1.2.2 上传公钥至服务器](#122-上传公钥至服务器)
+      - [1.2.3 加固 SSH 配置](#123-加固-ssh-配置)
+      - [1.2.4 测试连接](#124-测试连接)
+      - [1.2.5 配置本地快捷登录](#125-配置本地快捷登录)
     - [1.3 创建新用户](#13-创建新用户)
       - [1.3.1 创建用户并设置登录密码](#131-创建用户并设置登录密码)
       - [1.3.2 将用户加入 sudo 组](#132-将用户加入-sudo-组)
@@ -90,6 +103,7 @@
     - [高级 — 线程](#高级--线程)
     - [高级 — 磁盘](#高级--磁盘)
     - [高级 — 网络与 Peer](#高级--网络与-peer)
+  - [附：端口速查](#附端口速查)
 
 
 ## 零、 准备工作
@@ -107,7 +121,9 @@
 
 ## 一、 系统基础防护
 
-### 1.1 清除厂家模板残留
+### 1.1 系统基础优化
+
+#### 1.1.1 清除厂家模板
 
 使用 root 账密进行 ssh 登录
 
@@ -123,7 +139,72 @@ sudo crontab -e
 
 进入编辑界面后，寻找类似 `@reboot /admin/firstbootkvm yes` 的行，将其删除并保存
 
+#### 1.1.2 开启 BBR 网络加速
+
+把系统自带的 BBR 拥塞控制开启，能直接拉升机器的公网吞吐量：
+
+```bash
+echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+sysctl -p
+```
+
+#### 1.1.3 增大 Swap（可选）
+
+对于 2GB RAM 的 VPS，qBEE 和 PBH 同时运行时内存吃紧，适当增大 Swap 可提供缓冲：
+
+```bash
+# 查看当前 Swap
+sudo swapon --show
+
+# 创建 2G Swap 文件（可根据磁盘余量调整大小）
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# 写入 fstab 使其重启后自动挂载
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+降低 swappiness 让系统优先使用物理内存：
+
+```bash
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+| swappiness | 行为 |
+| :-: | :-: |
+| 0 | 不用 swap（如果 RAM 充足，可以完全不用）      |
+| 10 | 物理内存接近耗尽时才动用 swap（**推荐**）    |
+| 20 | 较保守的折中值                               |
+| 60 | 系统默认，较早换出到 swap                     |
+
+> 数值越低，系统越倾向保留物理内存，避免磁盘 I/O；但同时 OOM 风险略增。常规场景设为 10 即可。
+
+#### 1.1.4 切换默认 Shell 为 Bash
+
+Debian 12 Template 默认将 `/bin/sh` 指向 `dash`，不是 `bash`。本文所有脚本均以 `#!/bin/bash` 声明，**不受影响**，但个别系统脚本和交互环境可能行为异常（比如在 PowerShell 7 中主机名无彩色、部分 sh 脚本语法报错）
+
+将默认 Shell 切换为 bash：
+
+```bash
+# 查看当前指向
+ls -l /bin/sh
+
+# 重新配置（选择“否”，不使用 dash）
+sudo dpkg-reconfigure dash
+
+# 确认已切换
+ls -l /bin/sh
+```
+
+执行后应看到 `/bin/sh -> bash`。
+
 ### 1.2 SSH 密钥登录
+
+#### 1.2.1 生成密钥对
 
 在本地电脑（本文以 Windows 为例）打开 PowerShell 7，生成一把新密钥对：
 
@@ -134,12 +215,16 @@ ssh-keygen -t ed25519 -C "随便取名比如seedbox" -f ~/.ssh/id_ed25519_seedbo
 
 回车后，会提示你设置密码（passphrase），如果嫌麻烦可以直接连按两次回车跳过即可
 
+#### 1.2.2 上传公钥至服务器
+
 密钥生成后，在本地 PowerShell 中运行以下命令，将公钥上传到服务器（注意将 `your_vps_ip` 替换为真实 IP）
 
 ```powershell
 $pubKey = Get-Content "$HOME\.ssh\id_ed25519_seedbox.pub"
 $pubKey | ssh root@your_vps_ip "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 ```
+
+#### 1.2.3 加固 SSH 配置
 
 然后，回到 VPS SSH 窗口，编辑 SSH 配置文件：
 
@@ -155,13 +240,31 @@ PasswordAuthentication no   # 禁用密码登录
 PubkeyAuthentication yes    # 允许密钥登录
 ```
 
-重启 SSH 服务生效：
+顺便查看是否存在这一行 `Include /etc/ssh/sshd_config.d/*.conf`
+
+如有，在保存退出 `/etc/ssh/sshd_config` 的编辑后，输入：
+
+```bash
+ls -R /etc/ssh/sshd_config.d/
+```
+
+如果看到输出结果是 `50-cloud-init.conf`，则继续输入：
+
+```bash
+sudo nano /etc/ssh/sshd_config.d/50-cloud-init.conf
+```
+
+将里面的 `PasswordAuthentication yes` 改为 `PasswordAuthentication no`
+
+重启 SSH 服务使变更生效：
 
 ```bash
 sudo systemctl restart sshd
 ```
 
 注意，重启服务后，先别关闭当前的 SSH 终端窗口，先开一个新的终端窗口，测试一下能不能用新端口和密钥成功连上，如果连不上，在原来的窗口里把配置改回来
+
+#### 1.2.4 测试连接
 
 从本地 Windows 测试连接的命令是：
 
@@ -171,6 +274,8 @@ ssh -i ./id_ed25519_seedbox -p 43210 root@your_vps_ip
 ```
 
 如果私钥设置了 passphrase，在连接时会提示输入；如果没有设置，则直接登录
+
+#### 1.2.5 配置本地快捷登录
 
 如果希望后续不用每次都输路径和端口，也可以在本地添加一个配置块：
 
@@ -212,6 +317,7 @@ useradd -m -u 1000 yourname
 # 设置密码（必须设置，否则无法使用 sudo）
 passwd yourname
 ```
+> [!NOTE]
 > 系统会提示你输入两次密码，虽然我们主要用密钥登录，但 **`sudo` 默认需要用户有密码**，否则会报错 `user is not in the sudoers file` 或 `no password set`
 
 #### 1.3.2 将用户加入 sudo 组
@@ -221,6 +327,7 @@ usermod -aG sudo yourname
 ```
 
 #### 1.3.3 配置免密 sudo （可选、谨慎！）
+> [!CAUTION]
 > 跳过密码验证会降低安全性，仅建议在**个人独占、无敏感数据**的 VPS 上使用
 
 如果你希望执行 `sudo` 时**不用输密码**，编辑 sudoers 文件：
@@ -237,7 +344,12 @@ yourname ALL=(ALL) NOPASSWD: ALL
 
 Ctrl+O 、回车、 Ctrl+X 保存退出
 
-> 比较推荐的方法是保留密码验证，只对特定命令免密（比如 `sudo systemctl restart qbittorrent`），本教程为简化流程采用全局免密
+> [!TIP]
+> 比较推荐的方法是保留密码验证，只对特定命令免密
+> 
+> 比如 `sudo systemctl restart qbittorrent`
+> 
+> 本教程为简化流程采用全局免密
 
 #### 1.3.4 将公钥复制给新用户
 
@@ -509,6 +621,9 @@ mkdir -p ~/downloads/bd_archive
 #### 2.2.1 安装 qBEE
 
 ```bash
+# 安装依赖
+sudo apt install -y unzip
+
 # 下载静态编译包（一般选择 x86_64 架构即可）
 wget https://github.com/c0re100/qBittorrent-Enhanced-Edition/releases/latest/download/qbittorrent-enhanced-nox_x86_64-linux-musl_static.zip
 
@@ -1242,3 +1357,17 @@ Host seedbox-cf
 - 单个 Peer 最大未完成请求：250
 - 允许来自同一 IP 的多个连接：关
 - 上传连接策略：最快上传
+
+---
+
+## 附：端口速查
+
+| 端口  | 协议     | 用途               | 在何处配置                 |
+| ----- | -------- | ------------------ | -------------------------- |
+| 43210 | TCP      | SSH                | `sshd_config` / 防火墙脚本 |
+| 80    | TCP      | HTTP（Caddy 反代） | 防火墙脚本                 |
+| 443   | TCP      | HTTPS（Caddy）     | Caddy 自动 / 防火墙脚本    |
+| 8080  | TCP      | qBEE WebUI         | qBittorrent 默认           |
+| 54321 | TCP/UDP  | BT 监听             | qBittorrent / 防火墙脚本   |
+| 9898  | TCP      | PBH WebUI          | PBH 默认                   |
+| 5244  | TCP      | OpenList WebUI     | OpenList 默认              |
