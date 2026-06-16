@@ -4,7 +4,9 @@
 
 在此之前的很长一段时间里，我一直使用 Windows 本机运行 qBEE 追番。日常使用倒也没什么大问题，只是偶尔会系统卡顿一下（尤其在我播放音频的时候尤为明显），而且网络也似乎时不时被运营商Q，多少有些不便。再考虑到长期全天做种对 SSD 有读写负担，索性迁移到 VPS 上
 
-前阵子我买了某芬兰厂家的普通 Seedbox（无 root 权限的普通盒子），但没想到短时间内就经历了两次服务宕机，发工单也没真人，都是 AI 敷衍回复。虽然有一键搭建脚本，但它们大多面向 PT 刷流场景，又或者里面预装很多东西等等之类的，于是我便想着，为什么我不自己搞一台大盘机做 Seedbox 呢？
+前阵子我买了某芬兰厂家的普通 Seedbox（无 root 权限的普通盒子），但没想到短时间内就经历了两次服务宕机，发工单也没真人，都是 AI 敷衍回复。
+
+虽然社区也已经有了一键搭建脚本，但它们大多面向 PT 刷流场景，又或者里面预装很多东西等等之类的，于是我便想着，为什么我不自己搞一台大盘机做 Seedbox 呢？
 
 但最近硬盘内存涨价，连带服务器也水涨船高，便宜的大盘机基本都处于售罄状态，更何况是版权宽松的芬兰、荷兰和卢森堡等地的机器，特别某些热门商家，即便补货也是被脚本秒了。要么去继续蹲，要么溢价收……
 
@@ -112,7 +114,7 @@
     - [高级 — 线程](#高级--线程)
     - [高级 — 磁盘](#高级--磁盘)
     - [高级 — 网络与 Peer](#高级--网络与-peer)
-  - [附：端口速查](#附端口速查)
+  - [附：本文提及端口速查](#附本文提及端口速查)
 
 
 ## 零、 准备工作
@@ -192,7 +194,7 @@ sudo sysctl -p
 | 20 | 较保守的折中值                               |
 | 60 | 系统默认，较早换出到 swap                     |
 
-> 数值越低，系统越倾向保留物理内存，避免磁盘 I/O；但同时 OOM 风险略增。常规场景设为 10 即可。
+> 数值越低，系统越倾向保留物理内存，避免磁盘 I/O；但同时 OOM 风险略增。常规场景设为 10 即可
 
 #### 1.1.4 切换默认 Shell 为 Bash
 
@@ -253,7 +255,7 @@ PubkeyAuthentication yes    # 允许密钥登录
 
 顺便查看是否存在这一行 `Include /etc/ssh/sshd_config.d/*.conf`
 
-如有，在保存退出 `/etc/ssh/sshd_config` 的编辑后，输入：
+如有，在保存退出对 `/etc/ssh/sshd_config` 的编辑后，输入：
 
 ```bash
 ls -R /etc/ssh/sshd_config.d/
@@ -288,7 +290,9 @@ ssh -i ./id_ed25519_seedbox -p 43210 root@your_vps_ip
 
 #### 1.2.5 配置本地快捷登录
 
-如果希望后续不用每次都输路径和端口，也可以在本地添加一个配置块：
+如果希望后续不用每次都输路径和端口，可以在本地添加一个配置块
+
+在 Windows Powershell 7 输入：
 
 ```powershell
 notepad $HOME/.ssh/config 
@@ -463,7 +467,7 @@ sudo systemctl disable ufw
 sudo nano /usr/local/bin/deploy_firewall.sh
 ```
 
-粘贴以下脚本：
+粘贴以下脚本（脚本稍长，挂载 GitHub 上）：
 
 [deploy_firewall.sh](deploy_firewall.sh)
 
@@ -515,7 +519,7 @@ sudo /usr/local/bin/deploy_firewall.sh
 sudo nano /usr/local/bin/update_blacklists.sh
 ```
 
-粘贴以下脚本：
+粘贴以下脚本（脚本稍长，挂载 GitHub 上）：
 
 [update_blacklists.sh](update_blacklists.sh)
 
@@ -590,7 +594,9 @@ num   pkts bytes target     prot opt in     out     source               destina
 ```
 
 > [!NOTE]
-> 443 端口的处理逻辑是「先匹配 ASN 黑名单 DROP → 再匹配 P2P 黑名单 DROP → 最后默认 ACCEPT 」
+> 443 端口的处理逻辑是
+>
+>「先匹配 ASN 黑名单 DROP → 再匹配 P2P 黑名单 DROP → 最后默认 ACCEPT 」
 > 
 > 即如果请求来源命中任一名单则直接丢弃，否则放行
 > 
@@ -664,8 +670,8 @@ After=network.target
 
 [Service]
 Type=exec
-User=yourname
-Group=yourname
+User=yourname  # 改为你的用户名
+Group=yourname # 改为你的用户名
 UMask=002
 ExecStart=/usr/local/bin/qbittorrent-nox
 Restart=on-failure
@@ -757,8 +763,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=yourname
-Group=yourname
+User=yourname  # 改为你的用户名
+Group=yourname # 改为你的用户名
 WorkingDirectory=/home/yourname/seedbox/config/pbh/PeerBanHelper
 ExecStart=/opt/java25/bin/java -jar /home/yourname/seedbox/config/pbh/PeerBanHelper/PeerBanHelper.jar
 Restart=on-failure
@@ -790,7 +796,6 @@ sudo chmod +x /usr/local/bin/openlist
 
 # 4. 清理安装包
 rm openlist-linux-amd64.tar.gz
-
 ```
 
 2. **Systemd 守护：** 
@@ -809,8 +814,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=yourname
-Group=yourname
+User=yourname  # 改为你的用户名
+Group=yourname # 改为你的用户名
 WorkingDirectory=/home/yourname/seedbox/config/openlist
 ExecStart=/usr/local/bin/openlist server
 Restart=on-failure
@@ -990,7 +995,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now openlist
 
 # 直接强制设定管理员密码（复杂强密码需要使用单引号）
-/usr/local/bin/openlist admin set '1111111111111'
+/usr/local/bin/openlist admin set '1111111111111' # 此处仅示例，实际请改为强密码！
 ```
 
 在 Windows 浏览器打开 `https://openlist.yourdomain.com`
@@ -1064,7 +1069,7 @@ rm vuetorrent.zip
 
 ### 4.2 自动清理过期番剧
 
-qBEE 下载的番剧会长期占用磁盘空间，本脚本定期扫描 `anime` 目录，将**超过 120 天且未在 qBEE 中做种**的旧番自动删除，防止磁盘被撑爆
+qBEE 下载的番剧会长期占用磁盘空间，用一个脚本定期扫描 `anime` 目录，将**超过 120 天且未在 qBEE 中做种**的旧番自动删除，防止磁盘被撑爆
 
 > [!NOTE]
 > 触发条件：文件最后修改时间距今超过 `EXPIRE_DAYS`（默认 120 天），且该文件名不在 qBEE 当前种子列表中
@@ -1135,7 +1140,7 @@ crontab -e
 
 ### 4.3 优化线路跳转（Mihomo 代理转发）
 
-假设，你的 seedbox 在 LA，但是线路很差，但是恰好你又有另一台 LA 优化线路的机，并且更巧还搭建好了魔法，那么可利用本地 Mihomo 客户端将优化节点作为 SSH 跳板
+假设，你的 Seedbox 在 LA，但是线路很差，但是恰好你又有另一台 LA 优化线路的机，并且更巧还搭建好了魔法，那么可利用本地 Mihomo 客户端将优化节点作为 SSH 跳板
 
 如果你的 mihomo rules 最后是 `Match, Proxy`，那当你访问 Seedbox 时，大概率会被自动捕获并走 proxy，但我们可以简单加一个 tunnel 字段，使得 mihomo 不必每次都去匹配 rules：
 
@@ -1359,6 +1364,14 @@ Host seedbox-cf
 - LSD：关
 - 加密模式：优先加密
 
+这里额外说一下加密模式
+
+|选项|中文|libtorrent 策略|行为|适用场景|
+|:-:|:-:|:-:|:-:|:-:|
+|Allow encryption|允许加密 / 优先加密|pe_enabled|尝试加密，对方不支持则降级明文|兼容性好，日常用|
+|Require encryption|强制加密|pe_forced|强制加密，拒绝明文连接|应对 ISP 限速|
+|Disable encryption|禁用加密|pe_disabled|禁用加密，仅明文|连接某些极其古老的 tracker/peer|
+
 ### 高级 — 内存
 
 - RAM 使用限制：384 MiB
@@ -1390,7 +1403,7 @@ Host seedbox-cf
 
 ---
 
-## 附：端口速查
+## 附：本文提及端口速查
 
 | 端口  | 协议     | 用途               | 在何处配置                 |
 | ----- | -------- | ------------------ | -------------------------- |
