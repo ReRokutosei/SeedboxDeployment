@@ -13,28 +13,17 @@ SSH_PORT=43210
 BT_TCP_PORT=54321
 BT_UDP_PORT=54321
 
-# 额外放行的 Web 端口（80 已默认放行，443 由黑名单逻辑单独处理）
+# Web 端口（80 用于 HTTP，443 用于 HTTPS）
 # 如需放行其他端口请在此添加
-WEB_PORTS=(80)
+WEB_PORTS=(80 443)
 
 # 是否启用 IPv6（1=启用，0=禁用）
 ENABLE_IPV6=1
 
-# 邻居网段阻断（针对 443 端口，设为 "-" 表示不启用）
+# 邻居网段全局阻断（设为 "-" 表示不启用）
 # 示例: NEIGHBOR_V4="10.0.0.0/8"
 NEIGHBOR_V4="-"
 NEIGHBOR_V6="-"
-
-# 需要屏蔽的 ASN（云厂商）
-# 格式: "ASN|名称"
-ASNS=(
-    "14061|DigitalOcean"
-    "16509|AWS"
-    "15169|Google_Cloud"
-    "8075|Azure"
-    "20473|Vultr"
-    "31898|Oracle"
-)
 
 
 export PATH="/usr/sbin:/sbin:$PATH"
@@ -123,11 +112,22 @@ deploy_v4() {
     iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     iptables -A INPUT -i lo -j ACCEPT
 
+    # 全局阻断：邻居网段
+    if [ "$NEIGHBOR_V4" != "-" ]; then
+        iptables -A INPUT -s "$NEIGHBOR_V4" -j DROP
+        ok "Neighbor v4 blocked globally: $NEIGHBOR_V4"
+    fi
+
+    # 全局阻断：ASN & P2P 黑名单
+    iptables -A INPUT -m set --match-set bad_asn_v4 src -j DROP
+    iptables -A INPUT -m set --match-set bad_p2p_v4 src -j DROP
+    ok "Global blacklist: DROP(ASN) -> DROP(P2P)"
+
     # SSH
     iptables -A INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT
     ok "Allow TCP port $SSH_PORT (SSH)"
 
-    # Web
+    # Web (80, 443)
     for port in "${WEB_PORTS[@]}"; do
         iptables -A INPUT -p tcp --dport "$port" -j ACCEPT
         ok "Allow TCP port $port (Web)"
@@ -138,20 +138,6 @@ deploy_v4() {
     ok "Allow TCP port $BT_TCP_PORT (BT)"
     iptables -A INPUT -p udp --dport "$BT_UDP_PORT" -j ACCEPT
     ok "Allow UDP port $BT_UDP_PORT (BT DHT)"
-
-    # 邻居阻断
-    if [ "$NEIGHBOR_V4" != "-" ]; then
-        iptables -A INPUT -p tcp --dport 443 -s "$NEIGHBOR_V4" -j DROP
-        ok "Neighbor v4 blocked: $NEIGHBOR_V4 (port 443)"
-    fi
-
-    # 443: 先 DROP 黑名单，最后 ACCEPT
-    iptables -A INPUT -p tcp --dport 443 -m set --match-set bad_asn_v4 src -j DROP
-    iptables -A INPUT -p tcp --dport 443 -m set --match-set bad_p2p_v4 src -j DROP
-
-    # 最终放行 443
-    iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-    ok "HTTPS rule: DROP(ASN) -> DROP(P2P) -> ACCEPT"
 }
 
 # 部署 ip6tables 规则
@@ -166,23 +152,27 @@ deploy_v6() {
     ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     ip6tables -A INPUT -i lo -j ACCEPT
 
+    # 全局阻断：邻居网段
+    if [ "$NEIGHBOR_V6" != "-" ]; then
+        ip6tables -A INPUT -s "$NEIGHBOR_V6" -j DROP
+        ok "Neighbor v6 blocked globally: $NEIGHBOR_V6"
+    fi
+
+    # 全局阻断：ASN 黑名单
+    ip6tables -A INPUT -m set --match-set bad_asn_v6 src -j DROP
+    ok "Global blacklist: DROP(ASN)"
+
+    # SSH
     ip6tables -A INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT
 
+    # Web (80, 443)
     for port in "${WEB_PORTS[@]}"; do
         ip6tables -A INPUT -p tcp --dport "$port" -j ACCEPT
     done
 
+    # BT
     ip6tables -A INPUT -p tcp --dport "$BT_TCP_PORT" -j ACCEPT
     ip6tables -A INPUT -p udp --dport "$BT_UDP_PORT" -j ACCEPT
-
-    if [ "$NEIGHBOR_V6" != "-" ]; then
-        ip6tables -A INPUT -p tcp --dport 443 -s "$NEIGHBOR_V6" -j DROP
-        ok "Neighbor v6 blocked: $NEIGHBOR_V6 (port 443)"
-    fi
-
-    ip6tables -A INPUT -p tcp --dport 443 -m set --match-set bad_asn_v6 src -j DROP
-    ip6tables -A INPUT -p tcp --dport 443 -j ACCEPT
-    ok "IPv6 HTTPS rule: DROP(ASN) -> ACCEPT"
 }
 
 # 持久化
