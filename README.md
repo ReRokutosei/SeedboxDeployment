@@ -198,15 +198,17 @@ sudo sysctl -p
 
 #### 1.1.4 切换默认 Shell 为 Bash
 
-Debian 12 Template 默认将 `/bin/sh` 指向 `dash`，不是 `bash`。本文所有脚本均以 `#!/bin/bash` 声明，**不受影响**，但个别系统脚本和交互环境可能行为异常（比如在 PowerShell 7 中主机名无彩色、部分 sh 脚本语法报错）
+Debian 12 Template 默认将 `/bin/sh` 指向 `dash`，不是 `bash`。本文所有脚本均以 `#!/bin/bash` 声明，**不受影响**，但个别系统脚本和交互环境可能行为异常（比如在 PowerShell 7 中主机名无彩色、部分 sh 脚本语法报错）。
 
 将默认 Shell 切换为 bash：
+
+**方法一（标准交互方式）：**
 
 ```bash
 # 查看当前指向
 ls -l /bin/sh
 
-# 重新配置（选择“否”，不使用 dash）
+# 重新配置 dash，在弹出的对话框中选择 <No>（即“不使用 dash 作为默认 sh”）
 sudo dpkg-reconfigure dash
 
 # 确认已切换
@@ -214,6 +216,21 @@ ls -l /bin/sh
 ```
 
 执行后应看到 `/bin/sh -> bash`。
+
+如果执行后没有弹出任何交互窗口（直接返回），可能是系统处于非交互模式，**请改用方法二：**
+
+```bash
+# 设置 debconf 选项为“不使用 dash”
+echo "dash dash/sh boolean false" | sudo debconf-set-selections
+
+# 手动链接到 bash
+sudo ln -sf bash /bin/sh
+
+# 确认切换
+ls -l /bin/sh
+```
+
+> 方法二同时更新了 debconf 数据库，因此后续 dash 包升级时不会自动覆盖该链接。如果交互失败，直接采用方法二即可，无需纠结弹窗。
 
 ### 1.2 SSH 密钥登录
 
@@ -372,7 +389,7 @@ Ctrl+O 、回车、 Ctrl+X 保存退出
 
 ```powershell
 $pubKey = Get-Content "$HOME\.ssh\id_ed25519_seedbox.pub"
-$pubKey | ssh root@your_vps_ip "mkdir -p /home/yourname/.ssh && chmod 700 /home/yourname/.ssh && cat >> /home/yourname/.ssh/authorized_keys && chmod 600 /home/yourname/.ssh/authorized_keys && chown -R yourname:yourname /home/yourname/.ssh"
+$pubKey | ssh seedbox "mkdir -p /home/yourname/.ssh && chmod 700 /home/yourname/.ssh && cat >> /home/yourname/.ssh/authorized_keys && chmod 600 /home/yourname/.ssh/authorized_keys && chown -R yourname:yourname /home/yourname/.ssh"
 ```
 
 #### 1.3.5 更新本地 SSH config
